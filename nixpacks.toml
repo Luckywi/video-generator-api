@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ['nodejs_18', 'ffmpeg']
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.build]
+cmds = ['mkdir -p logs uploads videos audio final final2 final3 final4 pollutant-clips']
+
+[start]
+cmd = 'npm start'
