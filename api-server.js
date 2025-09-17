@@ -187,9 +187,9 @@ async function addQualityClip(dateStr, indiceAtmo) {
         console.log(`🔧 Offset calculé: ${offset}s`);
 
         return new Promise((resolve, reject) => {
-            const ffmpegCmd = `ffmpeg -y -i "${inputVideo}" -i "${clipVideo}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -crf 23 -preset veryfast "${outputVideo}"`;
+            const ffmpegCmd = `ffmpeg -y -i "${inputVideo}" -i "${clipVideo}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -crf 28 -preset ultrafast -threads 2 -r 25 -movflags +faststart "${outputVideo}"`;
 
-            console.log('🔧 Concaténation avec concat...');
+            console.log('🔧 Concaténation avec concat optimisé Railway...');
 
             exec(ffmpegCmd, (error, stdout, stderr) => {
                 if (error) {
@@ -251,8 +251,8 @@ async function generatePollutantClips(atmoData, dateStr) {
 
         fs.writeFileSync(fileListPath, fileListContent);
 
-        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset veryfast -r 25 -avoid_negative_ts make_zero "${outputPath}"`;
-        console.log('🔧 Commande concat polluants avec réencodage et frame rate uniforme:', ffmpegCmd);
+        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 -avoid_negative_ts make_zero -movflags +faststart "${outputPath}"`;
+        console.log('🔧 Commande concat polluants optimisé Railway:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             if (fs.existsSync(fileListPath)) {
@@ -283,8 +283,8 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
         const absoluteFinal2Path = path.resolve(final2Path);
         const absolutePollutantPath = path.resolve(pollutantClipsPath);
 
-        const ffmpegCmd = `ffmpeg -y -i "${absoluteFinal2Path}" -i "${absolutePollutantPath}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast -r 25 "${outputPath}"`;
-        console.log('🔧 Commande combinaison finale avec filter_complex:', ffmpegCmd);
+        const ffmpegCmd = `ffmpeg -y -i "${absoluteFinal2Path}" -i "${absolutePollutantPath}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 -movflags +faststart "${outputPath}"`;
+        console.log('🔧 Commande combinaison finale optimisée Railway:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             if (error) {
@@ -292,7 +292,7 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
                 const tempFinal2 = path.join(outputDir, `temp-final2-${dateStr}.mp4`);
                 const tempPollutant = path.join(outputDir, `temp-pollutant-${dateStr}.mp4`);
 
-                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempFinal2}"`;
+                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`;
                 console.log('🔧 Normalisation final2:', normalizeCmd1);
 
                 exec(normalizeCmd1, (error1, stdout1, stderr1) => {
@@ -301,7 +301,7 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
                         return reject(new Error(stderr1));
                     }
 
-                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempPollutant}"`;
+                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`;
                     console.log('🔧 Normalisation pollutant:', normalizeCmd2);
 
                     exec(normalizeCmd2, (error2, stdout2, stderr2) => {
@@ -310,7 +310,7 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
                             return reject(new Error(stderr2));
                         }
 
-                        const finalConcatCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
+                        const finalConcatCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -movflags +faststart "${outputPath}"`;
                         console.log('🔧 Concaténation finale normalisée:', finalConcatCmd);
 
                         exec(finalConcatCmd, (error3, stdout3, stderr3) => {
@@ -346,8 +346,8 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
     const outputPath = path.join(outputDir, `complete-with-custom-${dateStr}.mp4`);
 
     return new Promise((resolve, reject) => {
-        const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast -r 25 "${outputPath}"`;
-        console.log('🔧 Final4 creation command:', ffmpegCmd);
+        const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 -movflags +faststart "${outputPath}"`;
+        console.log('🔧 Final4 optimisé Railway:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             if (error) {
@@ -366,17 +366,17 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                     try {
                         await Promise.all([
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempFinal2}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempCustom}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempPollutant}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
                             })
                         ]);
 
-                        const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustom}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
+                        const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustom}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -movflags +faststart "${outputPath}"`;
 
                         exec(finalCmd, (finalError, stdout2, stderr2) => {
                             [tempFinal2, tempCustom, tempPollutant].forEach(file => {
