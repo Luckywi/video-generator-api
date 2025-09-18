@@ -16,7 +16,8 @@ async function generateAudio(text, outputPath) {
         console.log('🎤 Generating audio with ElevenLabs...');
 
         // Ajouter une pause SSML de 200ms après la date
-        const ssmlText = `<speak>${text}<break time="200ms"/></speak>`;
+        const ssmlText = `<speak><prosody rate="medium" pitch="+1st" volume="medium">${text}</prosody></speak>`;
+
         console.log('📝 SSML Text:', ssmlText);
 
         const response = await axios.post(

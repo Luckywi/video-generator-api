@@ -49,9 +49,9 @@ function getVideoDuration(videoPath) {
 
 async function generateMuteVideo(text, videoPath, duration) {
     return new Promise((resolve, reject) => {
-        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=80:fontcolor=black,fade=in:st=0:d=1" -c:v libx264 -y "${videoPath}"`;
+        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':fontfile='./fonts/Inter/static/Inter_18pt-Medium.ttf':fontsize='if(lt(t,1),80+15*abs(sin(t*3)),80)':x=(w-text_w)/2:y=(h-text_h)/2:fontcolor=black,fade=in:st=0:d=0.5" -c:v libx264 -y "${videoPath}"`;
 
-        console.log('📱 Génération vidéo verticale iPhone:', videoPath);
+        console.log('📱 Génération vidéo verticale moderne avec effet bounce:', videoPath);
 
         exec(ffmpegCommand, (error, stdout, stderr) => {
             if (error) {
@@ -68,15 +68,19 @@ async function generateMuteVideo(text, videoPath, duration) {
 
 async function mergeAudioVideo(dateStr) {
     const videoPath = path.resolve(`videos/${dateStr}.mp4`);
-    const audioPath = path.resolve(`audio/${dateStr}.mp3`);
+    const elevenLabsAudio = path.resolve(`audio/${dateStr}.mp3`);
+    const softRiserPath = path.resolve('audio-effet/soft_riser_song_for_-#2-1758206926855.mp3');
     const outputDir = path.resolve('final');
     const outputPath = path.join(outputDir, `${dateStr}.mp4`);
 
     if (!fs.existsSync(videoPath)) {
         throw new Error(`❌ Vidéo manquante: ${videoPath}`);
     }
-    if (!fs.existsSync(audioPath)) {
-        throw new Error(`❌ Audio manquant: ${audioPath}`);
+    if (!fs.existsSync(elevenLabsAudio)) {
+        throw new Error(`❌ Audio ElevenLabs manquant: ${elevenLabsAudio}`);
+    }
+    if (!fs.existsSync(softRiserPath)) {
+        throw new Error(`❌ Effet sonore manquant: ${softRiserPath}`);
     }
 
     if (!fs.existsSync(outputDir)) {
@@ -85,15 +89,17 @@ async function mergeAudioVideo(dateStr) {
     }
 
     return new Promise((resolve, reject) => {
-        const ffmpegCmd = `ffmpeg -y -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -shortest "${outputPath}"`;
-        console.log('🔧 Fusion audio/vidéo:', ffmpegCmd);
+        // Mix audio : soft_riser au début + ElevenLabs à 0.3s en superposition
+        const ffmpegCmd = `ffmpeg -y -i "${videoPath}" -i "${softRiserPath}" -i "${elevenLabsAudio}" -filter_complex "[1:a]volume=0.7[riser];[2:a]adelay=300|300[delayed_voice];[riser][delayed_voice]amix=inputs=2:duration=longest[mixed_audio]" -map 0:v -map "[mixed_audio]" -c:v copy -c:a aac -shortest "${outputPath}"`;
+
+        console.log('🔧 Fusion vidéo avec mix audio (riser + voix):', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             if (error) {
                 console.error('💥 Erreur FFmpeg fusion:', stderr);
                 return reject(new Error(stderr));
             }
-            console.log('✅ Fusion terminée:', outputPath);
+            console.log('✅ Fusion terminée avec mix audio:', outputPath);
             resolve(outputPath);
         });
     });
