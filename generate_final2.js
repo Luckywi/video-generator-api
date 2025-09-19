@@ -201,8 +201,8 @@ async function generatePollutantClips(atmoData, dateStr) {
         console.log('📁 Dossier pollutant-clips créé');
     }
 
-    // Ordre des polluants: PM2.5, O3, NO2, SO2
-    const pollutantOrder = ['PM2.5', 'O3', 'SO2', 'NO2'];
+    // Ordre des polluants: PM2.5 uniquement
+    const pollutantOrder = ['PM2.5'];
     const videoClips = [];
 
     console.log('\n=== GÉNÉRATION CLIPS POLLUANTS ===');
@@ -394,9 +394,11 @@ async function generateComplete() {
         // Étape 3: Obtenir durée audio et générer vidéo
         console.log('\n=== ÉTAPE 3: GÉNÉRATION VIDÉO ===');
         const audioDuration = await getAudioDuration(audioPath);
+        const videoDuration = audioDuration + 0.5; // Ajouter 0.5 seconde après l'audio
         console.log(`⏱️ Durée audio: ${audioDuration} secondes`);
+        console.log(`⏱️ Durée vidéo: ${videoDuration} secondes (+0.5s)`);
 
-        await generateMuteVideo(frenchDate, videoPath, audioDuration);
+        await generateMuteVideo(frenchDate, videoPath, videoDuration);
 
         // Étape 4: Fusionner audio et vidéo dans /final
         console.log('\n=== ÉTAPE 4: FUSION AUDIO/VIDÉO ===');

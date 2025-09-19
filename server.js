@@ -142,8 +142,8 @@ async function generateAirQualityVideos(atmoData, dateStr) {
         console.log('📁 Created final2 directory');
     }
 
-    // Ordre des polluants: PM2.5, O3, NO2, SO2
-    const pollutantOrder = ['PM2.5', 'O3', 'NO2', 'SO2'];
+    // Ordre des polluants: PM2.5 uniquement
+    const pollutantOrder = ['PM2.5'];
     const videoClips = [];
 
     for (const pollutant of pollutantOrder) {
@@ -347,11 +347,13 @@ app.post('/render', async (req, res) => {
         // Obtenir la durée de l'audio
         console.log('⏱️ Getting audio duration...');
         const audioDuration = await getAudioDuration(audioPath);
+        const videoDuration = audioDuration + 0.5; // Ajouter 0.5 seconde après l'audio
         console.log(`🕐 Audio duration: ${audioDuration} seconds`);
+        console.log(`🕐 Video duration: ${videoDuration} seconds (+0.5s)`);
 
         // Étape 3: Générer la vidéo muette
         console.log('🎬 Step 2: Generating mute video...');
-        await generateMuteVideo(frenchDate, videoPath, audioDuration);
+        await generateMuteVideo(frenchDate, videoPath, videoDuration);
 
         // Étape 4: Fusionner audio et vidéo
         console.log('🔧 Step 3: Merging audio and video...');
@@ -436,10 +438,12 @@ app.post('/render-with-custom-clip', upload.single('customClip'), async (req, re
         // Étape 3: Obtenir la durée de l'audio et générer la vidéo muette
         console.log('⏱️ Getting audio duration...');
         const audioDuration = await getAudioDuration(audioPath);
+        const videoDuration = audioDuration + 0.5; // Ajouter 0.5 seconde après l'audio
         console.log(`🕐 Audio duration: ${audioDuration} seconds`);
+        console.log(`🕐 Video duration: ${videoDuration} seconds (+0.5s)`);
 
         console.log('🎬 Step 2: Generating mute video...');
-        await generateMuteVideo(frenchDate, videoPath, audioDuration);
+        await generateMuteVideo(frenchDate, videoPath, videoDuration);
 
         // Étape 4: Fusionner audio et vidéo dans /final
         console.log('🔧 Step 3: Merging audio and video...');
