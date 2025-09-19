@@ -202,7 +202,7 @@ async function generatePollutantClips(atmoData, dateStr) {
     }
 
     // Ordre des polluants: PM2.5, O3, NO2, SO2
-    const pollutantOrder = ['PM2.5', 'O3', 'NO2', 'SO2'];
+    const pollutantOrder = ['PM2.5', 'O3', 'SO2', 'NO2'];
     const videoClips = [];
 
     console.log('\n=== GÉNÉRATION CLIPS POLLUANTS ===');
