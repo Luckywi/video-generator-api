@@ -93,7 +93,7 @@ function getVideoDuration(videoPath) {
 
 async function generateMuteVideo(text, videoPath, duration) {
     return new Promise((resolve, reject) => {
-        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':fontfile='./fonts/Inter/static/Inter_18pt-Medium.ttf':fontsize='if(lt(t,1),80+15*abs(sin(t*3)),80)':x=(w-text_w)/2:y=(h-text_h)/2:fontcolor=black,fade=in:st=0:d=0.5" -c:v libx264 -y "${videoPath}"`;
+        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':fontfile='./fonts/Inter/static/Inter_18pt-Medium.ttf':fontsize='if(lt(t,1),80+15*abs(sin(t*3)),80)':x=(w-text_w)/2:y=(h-text_h)/2:fontcolor=black,fade=in:st=0:d=0.5" -c:v libx264 -preset ultrafast -crf 28 -threads 2 -r 25 -movflags +faststart -y "${videoPath}"`;
 
         console.log('📱 Génération vidéo verticale avec Inter Medium et bounce unique:', videoPath);
 
