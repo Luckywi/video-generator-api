@@ -375,7 +375,7 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                                 exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${customClipPath}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
                                 exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
