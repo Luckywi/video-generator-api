@@ -49,9 +49,9 @@ function getVideoDuration(videoPath) {
 
 async function generateMuteVideo(text, videoPath, duration) {
     return new Promise((resolve, reject) => {
-        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':fontfile='./fonts/Inter/static/Inter_18pt-Medium.ttf':fontsize='if(lt(t,1),80+15*abs(sin(t*3)),80)':x=(w-text_w)/2:y=(h-text_h)/2:fontcolor=black,fade=in:st=0:d=0.5" -c:v libx264 -y "${videoPath}"`;
+        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=80:fontcolor=black,fade=in:st=0:d=1" -c:v libx264 -y "${videoPath}"`;
 
-        console.log('📱 Génération vidéo verticale moderne avec effet bounce:', videoPath);
+        console.log('📱 Génération vidéo verticale iPhone:', videoPath);
 
         exec(ffmpegCommand, (error, stdout, stderr) => {
             if (error) {
@@ -68,19 +68,15 @@ async function generateMuteVideo(text, videoPath, duration) {
 
 async function mergeAudioVideo(dateStr) {
     const videoPath = path.resolve(`videos/${dateStr}.mp4`);
-    const elevenLabsAudio = path.resolve(`audio/${dateStr}.mp3`);
-    const softRiserPath = path.resolve('audio-effet/soft_riser_song_for_-#2-1758206926855.mp3');
+    const audioPath = path.resolve(`audio/${dateStr}.mp3`);
     const outputDir = path.resolve('final');
     const outputPath = path.join(outputDir, `${dateStr}.mp4`);
 
     if (!fs.existsSync(videoPath)) {
         throw new Error(`❌ Vidéo manquante: ${videoPath}`);
     }
-    if (!fs.existsSync(elevenLabsAudio)) {
-        throw new Error(`❌ Audio ElevenLabs manquant: ${elevenLabsAudio}`);
-    }
-    if (!fs.existsSync(softRiserPath)) {
-        throw new Error(`❌ Effet sonore manquant: ${softRiserPath}`);
+    if (!fs.existsSync(audioPath)) {
+        throw new Error(`❌ Audio manquant: ${audioPath}`);
     }
 
     if (!fs.existsSync(outputDir)) {
@@ -89,17 +85,15 @@ async function mergeAudioVideo(dateStr) {
     }
 
     return new Promise((resolve, reject) => {
-        // Mix audio : soft_riser au début + ElevenLabs à 0.3s en superposition
-        const ffmpegCmd = `ffmpeg -y -i "${videoPath}" -i "${softRiserPath}" -i "${elevenLabsAudio}" -filter_complex "[1:a]volume=0.7[riser];[2:a]adelay=300|300[delayed_voice];[riser][delayed_voice]amix=inputs=2:duration=longest[mixed_audio]" -map 0:v -map "[mixed_audio]" -c:v copy -c:a aac -shortest "${outputPath}"`;
-
-        console.log('🔧 Fusion vidéo avec mix audio (riser + voix):', ffmpegCmd);
+        const ffmpegCmd = `ffmpeg -y -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -shortest "${outputPath}"`;
+        console.log('🔧 Fusion audio/vidéo:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             if (error) {
                 console.error('💥 Erreur FFmpeg fusion:', stderr);
                 return reject(new Error(stderr));
             }
-            console.log('✅ Fusion terminée avec mix audio:', outputPath);
+            console.log('✅ Fusion terminée:', outputPath);
             resolve(outputPath);
         });
     });
@@ -201,8 +195,8 @@ async function generatePollutantClips(atmoData, dateStr) {
         console.log('📁 Dossier pollutant-clips créé');
     }
 
-    // Ordre des polluants: PM2.5 uniquement
-    const pollutantOrder = ['PM2.5'];
+    // Ordre des polluants: PM2.5, O3, NO2, SO2
+    const pollutantOrder = ['PM2.5', 'O3', 'NO2', 'SO2'];
     const videoClips = [];
 
     console.log('\n=== GÉNÉRATION CLIPS POLLUANTS ===');
@@ -243,9 +237,8 @@ async function generatePollutantClips(atmoData, dateStr) {
 
         fs.writeFileSync(fileListPath, fileListContent);
 
-        // Forcer le réencodage avec frame rate uniforme pour assurer la compatibilité
-        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset veryfast -r 25 -avoid_negative_ts make_zero "${outputPath}"`;
-        console.log('🔧 Commande concat polluants avec réencodage et frame rate uniforme:', ffmpegCmd);
+        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c copy "${outputPath}"`;
+        console.log('🔧 Commande concat polluants:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             // Nettoyer le fichier temporaire
@@ -257,7 +250,7 @@ async function generatePollutantClips(atmoData, dateStr) {
                 console.error('💥 Erreur concat polluants:', stderr);
                 return reject(new Error(stderr));
             }
-            console.log('✅ Clips polluants concaténés avec réencodage:', outputPath);
+            console.log('✅ Clips polluants concaténés:', outputPath);
             resolve(outputPath);
         });
     });
@@ -288,9 +281,9 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
 
         console.log('📝 Contenu du fichier de liste:', fileListContent);
 
-        // Utiliser une approche différente avec les filtres FFmpeg
-        const ffmpegCmd = `ffmpeg -y -i "${absoluteFinal2Path}" -i "${absolutePollutantPath}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast -r 25 "${outputPath}"`;
-        console.log('🔧 Commande combinaison finale avec filter_complex:', ffmpegCmd);
+        // Essayer d'abord avec -c copy, puis avec réencodage si ça échoue
+        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c copy "${outputPath}"`;
+        console.log('🔧 Commande combinaison finale:', ffmpegCmd);
 
         exec(ffmpegCmd, (error, stdout, stderr) => {
             // Nettoyer le fichier temporaire
@@ -299,49 +292,29 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
             }
 
             if (error) {
-                console.log('🔄 Tentative avec méthode de fallback...');
-                // Méthode de fallback avec re-encodage des deux inputs séparément
-                const tempFinal2 = path.join(outputDir, `temp-final2-${dateStr}.mp4`);
-                const tempPollutant = path.join(outputDir, `temp-pollutant-${dateStr}.mp4`);
+                console.log('🔄 Tentative avec réencodage...');
+                // Recréer le fichier de liste
+                fs.writeFileSync(fileListPath, fileListContent);
 
-                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempFinal2}"`;
-                console.log('🔧 Normalisation final2:', normalizeCmd1);
+                // Commande avec réencodage
+                const ffmpegCmdRecode = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
+                console.log('🔧 Commande avec réencodage:', ffmpegCmdRecode);
 
-                exec(normalizeCmd1, (error1, stdout1, stderr1) => {
-                    if (error1) {
-                        console.error('💥 Erreur normalisation final2:', stderr1);
-                        return reject(new Error(stderr1));
+                exec(ffmpegCmdRecode, (error2, stdout2, stderr2) => {
+                    // Nettoyer le fichier temporaire
+                    if (fs.existsSync(fileListPath)) {
+                        fs.unlinkSync(fileListPath);
                     }
 
-                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempPollutant}"`;
-                    console.log('🔧 Normalisation pollutant:', normalizeCmd2);
-
-                    exec(normalizeCmd2, (error2, stdout2, stderr2) => {
-                        if (error2) {
-                            console.error('💥 Erreur normalisation pollutant:', stderr2);
-                            return reject(new Error(stderr2));
-                        }
-
-                        const finalConcatCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
-                        console.log('🔧 Concaténation finale normalisée:', finalConcatCmd);
-
-                        exec(finalConcatCmd, (error3, stdout3, stderr3) => {
-                            // Nettoyer les fichiers temporaires
-                            [tempFinal2, tempPollutant].forEach(file => {
-                                if (fs.existsSync(file)) fs.unlinkSync(file);
-                            });
-
-                            if (error3) {
-                                console.error('💥 Erreur concaténation finale:', stderr3);
-                                return reject(new Error(stderr3));
-                            }
-                            console.log('✅ Vidéo finale créée avec normalisation:', outputPath);
-                            resolve(outputPath);
-                        });
-                    });
+                    if (error2) {
+                        console.error('💥 Erreur combinaison finale (réencodage):', stderr2);
+                        return reject(new Error(stderr2));
+                    }
+                    console.log('✅ Vidéo finale créée avec réencodage:', outputPath);
+                    resolve(outputPath);
                 });
             } else {
-                console.log('✅ Vidéo finale créée avec filter_complex:', outputPath);
+                console.log('✅ Vidéo finale créée:', outputPath);
                 resolve(outputPath);
             }
         });
@@ -394,11 +367,9 @@ async function generateComplete() {
         // Étape 3: Obtenir durée audio et générer vidéo
         console.log('\n=== ÉTAPE 3: GÉNÉRATION VIDÉO ===');
         const audioDuration = await getAudioDuration(audioPath);
-        const videoDuration = audioDuration + 0.5; // Ajouter 0.5 seconde après l'audio
         console.log(`⏱️ Durée audio: ${audioDuration} secondes`);
-        console.log(`⏱️ Durée vidéo: ${videoDuration} secondes (+0.5s)`);
 
-        await generateMuteVideo(frenchDate, videoPath, videoDuration);
+        await generateMuteVideo(frenchDate, videoPath, audioDuration);
 
         // Étape 4: Fusionner audio et vidéo dans /final
         console.log('\n=== ÉTAPE 4: FUSION AUDIO/VIDÉO ===');
