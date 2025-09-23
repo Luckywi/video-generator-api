@@ -251,10 +251,10 @@ async function generatePollutantClips(atmoData, dateStr) {
 
         fs.writeFileSync(fileListPath, fileListContent);
 
-        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset veryfast -r 25 -avoid_negative_ts make_zero "${outputPath}"`;
+        const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${fileListPath}" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 -avoid_negative_ts make_zero "${outputPath}"`;
         console.log('🔧 Commande concat polluants avec réencodage et frame rate uniforme:', ffmpegCmd);
 
-        exec(ffmpegCmd, (error, stdout, stderr) => {
+        exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
             if (fs.existsSync(fileListPath)) {
                 fs.unlinkSync(fileListPath);
             }
