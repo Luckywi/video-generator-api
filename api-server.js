@@ -408,56 +408,111 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
 
 async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantClipsPath, dateStr) {
     const outputDir = path.resolve('final4');
+    const maskPath = path.resolve('template-qualité/bonne-mask-1.mov');
 
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
         console.log('📁 Dossier final4 créé');
     }
 
+    if (!fs.existsSync(maskPath)) {
+        throw new Error(`❌ Mask file manquant: ${maskPath}`);
+    }
+
     const outputPath = path.join(outputDir, `complete-with-custom-${dateStr}.mp4`);
+    const tempCustomWithMask = path.join(outputDir, `temp-custom-with-mask-${dateStr}.mp4`);
 
     return new Promise(async (resolve, reject) => {
         try {
-            console.log(`⏱️ Création Final4 avec mask dernière frame sur 0.7s du custom clip`);
+            // Obtenir la durée du customClip pour calculer le début de l'iris out
+            const customClipDuration = await getVideoDuration(customClipPath);
+            const irisStartTime = Math.max(0, customClipDuration - 0.5);
 
-            const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
-                [0:v]reverse,select='eq(n\\,0)',loop=loop=-1:size=17:start=0[last_frame_mask];
-                [1:v]scale=1080:1920[custom_scaled];
-                [custom_scaled][last_frame_mask]overlay=0:0:enable='lt(t,0.7)'[custom_with_mask];
-                [0:v][0:a][custom_with_mask][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
-            " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+            console.log(`⏱️ Durée custom clip: ${customClipDuration}s, iris out démarre à: ${irisStartTime}s`);
 
-            console.log('🔧 Commande Final4 avec mask dernière frame:', ffmpegCmd);
+            // Étape 1: Appliquer le mask overlay + iris out blanc sur le customClip
+            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]geq=r='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),r(X,Y),255)':g='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),g(X,Y),255)':b='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),b(X,Y),255)':enable='gte(t,${irisStartTime})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
+            console.log('🎭 Applying mask overlay + iris out to custom clip:', overlayCmd);
+
+            exec(overlayCmd, { timeout: 60000 }, (overlayError, stdout, stderr) => {
+            if (overlayError) {
+                console.error('💥 Erreur application mask:', stderr);
+                return reject(new Error(stderr));
+            }
+
+            console.log('✅ Mask appliqué au clip personnalisé');
+
+            // Étape 2: Concaténer final2 + customClipWithMask + pollutantClips
+            const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${tempCustomWithMask}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+            console.log('🔧 Final4 creation command with mask:', ffmpegCmd);
 
             exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
-                if (error) {
-                    console.log('🔄 Tentative avec méthode de fallback...');
-                    
-                    // Fallback si la méthode principale échoue
-                    const fallbackCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
-                        [1:v]scale=1080:1920[custom_scaled];
-                        [0:v]trim=end=${final2Duration},reverse,trim=duration=1,reverse,loop=loop=-1:size=17:start=0,trim=duration=0.7[overlay_mask];
-                        [custom_scaled][overlay_mask]overlay=enable='lt(t,0.7)'[masked_custom];
-                        [0:v][0:a][masked_custom][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
-                    " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+                // Nettoyer le fichier temporaire
+                if (fs.existsSync(tempCustomWithMask)) {
+                    fs.unlinkSync(tempCustomWithMask);
+                }
 
-                    exec(fallbackCmd, { timeout: 60000 }, (fallbackError, fallbackStdout, fallbackStderr) => {
-                        if (fallbackError) {
-                            console.error('💥 Erreur Final4 fallback:', fallbackStderr);
-                            return reject(new Error(fallbackStderr));
+                if (error) {
+                    console.log('🔄 Tentative avec normalisation des clips...');
+
+                    const tempDir = path.join(outputDir, 'temp');
+                    if (!fs.existsSync(tempDir)) {
+                        fs.mkdirSync(tempDir, { recursive: true });
+                    }
+
+                    const tempFinal2 = path.join(tempDir, `temp-final2-${dateStr}.mp4`);
+                    const tempCustomNorm = path.join(tempDir, `temp-custom-${dateStr}.mp4`);
+                    const tempPollutant = path.join(tempDir, `temp-pollutant-${dateStr}.mp4`);
+
+                    const normalizeAndCombine = async () => {
+                        try {
+                            // Normaliser le customClip avec le mask et iris out appliqués
+                            await new Promise((res, rej) => {
+                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]geq=r='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),r(X,Y),255)':g='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),g(X,Y),255)':b='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),b(X,Y),255)':enable='gte(t,${irisStartTime})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
+                                exec(normalizeCustomCmd, (err) => err ? rej(err) : res());
+                            });
+
+                            await Promise.all([
+                                new Promise((res, rej) => {
+                                    exec(`ffmpeg -y -i "${final2Path}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
+                                }),
+                                new Promise((res, rej) => {
+                                    exec(`ffmpeg -y -i "${pollutantClipsPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
+                                })
+                            ]);
+
+                            const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustomNorm}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 "${outputPath}"`;
+
+                            exec(finalCmd, (finalError, stdout2, stderr2) => {
+                                [tempFinal2, tempCustomNorm, tempPollutant].forEach(file => {
+                                    if (fs.existsSync(file)) fs.unlinkSync(file);
+                                });
+                                if (fs.existsSync(tempDir)) fs.rmdirSync(tempDir);
+
+                                if (finalError) {
+                                    console.error('💥 Erreur final4 après normalisation:', stderr2);
+                                    return reject(new Error(stderr2));
+                                }
+                                console.log('✅ Final4 video created with mask and normalization:', outputPath);
+                                resolve(outputPath);
+                            });
+
+                        } catch (normError) {
+                            console.error('💥 Erreur normalisation:', normError);
+                            reject(normError);
                         }
-                        console.log('✅ Final4 créé avec fallback');
-                        resolve(outputPath);
-                    });
+                    };
+
+                    normalizeAndCombine();
                 } else {
-                    console.log('✅ Final4 créé avec mask dernière frame');
+                    console.log('✅ Final4 video created with mask overlay:', outputPath);
                     resolve(outputPath);
                 }
             });
-
-        } catch (error) {
-            console.error('💥 Erreur createFinal4WithCustomClip:', error);
-            reject(error);
+        });
+        } catch (durationError) {
+            console.error('💥 Erreur obtention durée custom clip:', durationError);
+            reject(durationError);
         }
     });
 }
@@ -501,11 +556,9 @@ async function generateComplete(customClipPath = null) {
         // Étape 3: Obtenir durée audio et générer vidéo
         console.log('\n=== ÉTAPE 3: GÉNÉRATION VIDÉO ===');
         const audioDuration = await getAudioDuration(audioPath);
-        const videoDuration = audioDuration + 0.4; // Ajouter 0.4 seconde de pause après l'audio
         console.log(`⏱️ Durée audio: ${audioDuration} secondes`);
-        console.log(`⏱️ Durée vidéo: ${videoDuration} secondes (+0.4s de pause)`);
 
-        await generateMuteVideo(frenchDate, videoPath, videoDuration);
+        await generateMuteVideo(frenchDate, videoPath, audioDuration);
 
         // Étape 4: Fusionner audio et vidéo dans /final
         console.log('\n=== ÉTAPE 4: FUSION AUDIO/VIDÉO ===');
