@@ -47,6 +47,72 @@ function getTodayDateString() {
     return `${day}-${month}-${year}`;
 }
 
+function cleanupOldFiles(currentDateStr, keepCurrent = true) {
+    const directories = ['uploads', 'videos', 'audio', 'final', 'final2', 'final3', 'final4', 'pollutant-clips'];
+    let cleanedCount = 0;
+
+    directories.forEach(dir => {
+        if (!fs.existsSync(dir)) return;
+
+        try {
+            const files = fs.readdirSync(dir);
+            files.forEach(file => {
+                if (file.startsWith('.')) return; // Skip hidden files
+
+                const shouldDelete = keepCurrent
+                    ? !file.includes(currentDateStr)
+                    : true;
+
+                if (shouldDelete) {
+                    const filePath = path.join(dir, file);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        cleanedCount++;
+                        console.log(`🧹 Nettoyé: ${filePath}`);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error(`⚠️ Erreur nettoyage ${dir}:`, error.message);
+        }
+    });
+
+    if (cleanedCount > 0) {
+        console.log(`✅ Nettoyage terminé: ${cleanedCount} fichiers supprimés`);
+    }
+}
+
+function cleanupTempFiles() {
+    const tempPatterns = [
+        'temp-final2-*.mp4',
+        'temp-pollutant-*.mp4',
+        'temp-custom-*.mp4',
+        'filelist-*.txt'
+    ];
+
+    let cleanedCount = 0;
+
+    tempPatterns.forEach(pattern => {
+        try {
+            const files = fs.readdirSync('.').filter(file => {
+                return file.match(pattern.replace('*', '.*'));
+            });
+
+            files.forEach(file => {
+                fs.unlinkSync(file);
+                cleanedCount++;
+                console.log(`🧹 Temp nettoyé: ${file}`);
+            });
+        } catch (error) {
+            console.error(`⚠️ Erreur nettoyage temp:`, error.message);
+        }
+    });
+
+    if (cleanedCount > 0) {
+        console.log(`✅ Fichiers temporaires nettoyés: ${cleanedCount}`);
+    }
+}
+
 app.use(express.json());
 
 function formatDateToFrench(dateString) {
@@ -132,7 +198,7 @@ async function mergeAudioVideo(dateStr) {
         const ffmpegCmd = `ffmpeg -y -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -shortest "${outputPath}"`;
         console.log('🔧 Fusion audio/vidéo:', ffmpegCmd);
 
-        exec(ffmpegCmd, (error, stdout, stderr) => {
+        exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
             if (error) {
                 console.error('💥 Erreur FFmpeg fusion:', stderr);
                 return reject(new Error(stderr));
@@ -191,7 +257,7 @@ async function addQualityClip(dateStr, indiceAtmo) {
 
             console.log('🔧 Concaténation avec concat optimisé Railway...');
 
-            exec(ffmpegCmd, (error, stdout, stderr) => {
+            exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
                 if (error) {
                     console.error('💥 Erreur FFmpeg final2:', stderr);
                     return reject(new Error(stderr));
@@ -283,34 +349,34 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
         const absoluteFinal2Path = path.resolve(final2Path);
         const absolutePollutantPath = path.resolve(pollutantClipsPath);
 
-        const ffmpegCmd = `ffmpeg -y -i "${absoluteFinal2Path}" -i "${absolutePollutantPath}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast -r 25 "${outputPath}"`;
+        const ffmpegCmd = `ffmpeg -y -i "${absoluteFinal2Path}" -i "${absolutePollutantPath}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
         console.log('🔧 Commande combinaison finale avec filter_complex:', ffmpegCmd);
 
-        exec(ffmpegCmd, (error, stdout, stderr) => {
+        exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
             if (error) {
                 console.log('🔄 Tentative avec méthode de fallback...');
                 const tempFinal2 = path.join(outputDir, `temp-final2-${dateStr}.mp4`);
                 const tempPollutant = path.join(outputDir, `temp-pollutant-${dateStr}.mp4`);
 
-                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempFinal2}"`;
+                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`;
                 console.log('🔧 Normalisation final2:', normalizeCmd1);
 
-                exec(normalizeCmd1, (error1, stdout1, stderr1) => {
+                exec(normalizeCmd1, { timeout: 60000 }, (error1, stdout1, stderr1) => {
                     if (error1) {
                         console.error('💥 Erreur normalisation final2:', stderr1);
                         return reject(new Error(stderr1));
                     }
 
-                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempPollutant}"`;
+                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`;
                     console.log('🔧 Normalisation pollutant:', normalizeCmd2);
 
-                    exec(normalizeCmd2, (error2, stdout2, stderr2) => {
+                    exec(normalizeCmd2, { timeout: 60000 }, (error2, stdout2, stderr2) => {
                         if (error2) {
                             console.error('💥 Erreur normalisation pollutant:', stderr2);
                             return reject(new Error(stderr2));
                         }
 
-                        const finalConcatCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
+                        const finalConcatCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 "${outputPath}"`;
                         console.log('🔧 Concaténation finale normalisée:', finalConcatCmd);
 
                         exec(finalConcatCmd, (error3, stdout3, stderr3) => {
@@ -346,10 +412,10 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
     const outputPath = path.join(outputDir, `complete-with-custom-${dateStr}.mp4`);
 
     return new Promise((resolve, reject) => {
-        const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast -r 25 "${outputPath}"`;
+        const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
         console.log('🔧 Final4 creation command:', ffmpegCmd);
 
-        exec(ffmpegCmd, (error, stdout, stderr) => {
+        exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
             if (error) {
                 console.log('🔄 Tentative avec normalisation des clips...');
 
@@ -366,17 +432,17 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                     try {
                         await Promise.all([
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempFinal2}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempCustom}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset veryfast "${tempPollutant}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
                             })
                         ]);
 
-                        const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustom}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset veryfast "${outputPath}"`;
+                        const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustom}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 "${outputPath}"`;
 
                         exec(finalCmd, (finalError, stdout2, stderr2) => {
                             [tempFinal2, tempCustom, tempPollutant].forEach(file => {
@@ -514,6 +580,13 @@ app.post('/render', async (req, res) => {
         const result = await generateComplete();
 
         if (result.success) {
+            // Nettoyage final après succès
+            const dateStr = getTodayDateString();
+            setTimeout(() => {
+                cleanupOldFiles(dateStr, true);
+                cleanupTempFiles();
+            }, 1000);
+
             res.json({
                 success: true,
                 message: 'Vidéo générée avec succès',
@@ -548,6 +621,11 @@ app.post('/render-with-custom-clip', upload.single('customClip'), async (req, re
     try {
         console.log('🚀 POST /render-with-custom-clip - Starting...');
 
+        // Nettoyage préventif au début
+        const dateStr = getTodayDateString();
+        cleanupOldFiles(dateStr, true);
+        cleanupTempFiles();
+
         if (!req.file) {
             return res.status(400).json({
                 success: false,
@@ -561,6 +639,12 @@ app.post('/render-with-custom-clip', upload.single('customClip'), async (req, re
         const result = await generateComplete(customClipPath);
 
         if (result.success) {
+            // Nettoyage final après succès (garde seulement les fichiers du jour)
+            setTimeout(() => {
+                cleanupOldFiles(dateStr, true);
+                cleanupTempFiles();
+            }, 1000);
+
             res.json({
                 success: true,
                 message: 'Vidéo générée avec succès avec clip personnalisé',
@@ -627,6 +711,12 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🎬 Video Generator API running on port ${PORT}`);
+
+    // Nettoyage au démarrage
+    console.log('🧹 Nettoyage au démarrage...');
+    cleanupOldFiles('dummy', false); // Nettoie tout sauf les templates
+    cleanupTempFiles();
+
     console.log(`📋 Endpoints disponibles:`);
     console.log(`  POST /render - Génération vidéo complète`);
     console.log(`  POST /render-with-custom-clip - Génération avec clip personnalisé`);
