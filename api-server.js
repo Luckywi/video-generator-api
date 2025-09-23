@@ -418,43 +418,25 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
     return new Promise(async (resolve, reject) => {
         try {
-            console.log('🎬 Création séquence complexe Final4 avec transitions...');
+            console.log('🎬 Étape 1: Extension clip2 de 0.7s avec dernière frame...');
 
-            // Étape 1: Obtenir les durées des clips
-            const customClipDuration = await getVideoDuration(customClipPath);
-            console.log(`⏱️ Durée clip personnalisé: ${customClipDuration}s`);
-
-            // Étape 2: Créer la séquence complexe avec votre méthode optimisée
+            // Commande avec audio anticipé du clip importé
             const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
                 [0:v]tpad=stop_mode=clone:stop_duration=0.7[final2_extended];
-                [0:a]apad=pad_dur=0.7[final2_audio_extended];
-                [1:a]adelay=delays=0s:all=1[custom_audio_delayed];
-                [final2_audio_extended][custom_audio_delayed]amix=inputs=2:duration=first[mixed_audio_phase1];
-
+                [1:a]adelay=delays=0s[custom_audio_immediate];
+                [0:a][custom_audio_immediate]amix=inputs=2:duration=first[mixed_phase1_audio];
                 [1:v]scale=1080:1920[custom_scaled];
-                [custom_scaled]split[v1][v2];
-                [v1]trim=start=0:end=${customClipDuration - 0.7},setpts=PTS-STARTPTS[main_part];
-                [v2]trim=start=${customClipDuration - 0.7},setpts=PTS-STARTPTS[last_part];
-
-                color=white:size=1080x1920:duration=0.7[white];
-                nullsrc=size=1080x1920:duration=0.7,geq='if(lte((X-W/2)^2+(Y-H/2)^2,(1-T/0.7)*((W/2)^2)),255,0)'[mask];
-                [white][mask]alphamerge[white_overlay];
-
-                [last_part][white_overlay]overlay=format=auto:shortest=1[with_circle_effect];
-                [main_part][with_circle_effect]concat=n=2:v=1:a=0[custom_complete];
-
-                color=white:s=1080x1920:d=0.1[white_transition];
-
-                [final2_extended][mixed_audio_phase1][custom_complete][1:a][white_transition][custom_audio_delayed][2:v][2:a]concat=n=4:v=1:a=1:unsafe=1[outv][outa]
+                [custom_scaled]trim=start=0.7,setpts=PTS-STARTPTS[custom_video_trimmed];
+                [final2_extended][mixed_phase1_audio][custom_video_trimmed][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
             " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
-            console.log('🔧 Commande Final4 avec séquence complexe:', ffmpegCmd);
+            console.log('🔧 Commande Final4 avec extension clip2:', ffmpegCmd);
 
-            exec(ffmpegCmd, { timeout: 120000 }, (error, stdout, stderr) => {
+            exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
                 if (error) {
-                    console.log('🔄 Tentative avec méthode simplifiée...');
+                    console.log('🔄 Tentative avec méthode de base...');
 
-                    // Fallback vers l'ancienne méthode si la complexe échoue
+                    // Fallback vers concat simple sans extension
                     const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[1:v]scale=1080:1920[custom_scaled];[0:v][0:a][custom_scaled][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
                     exec(simpleFfmpegCmd, { timeout: 60000 }, (simpleError, simpleStdout, simpleStderr) => {
@@ -462,11 +444,11 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                             console.error('💥 Erreur Final4 simple:', simpleStderr);
                             return reject(new Error(simpleStderr));
                         }
-                        console.log('✅ Final4 créé avec méthode simplifiée:', outputPath);
+                        console.log('✅ Final4 créé avec méthode de base:', outputPath);
                         resolve(outputPath);
                     });
                 } else {
-                    console.log('✅ Final4 créé avec séquence complexe:', outputPath);
+                    console.log('✅ Final4 créé avec extension clip2:', outputPath);
                     resolve(outputPath);
                 }
             });
