@@ -418,41 +418,39 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
     return new Promise(async (resolve, reject) => {
         try {
-            const final2Duration = await getVideoDuration(final2Path);
-
-            console.log(`⏱️ Durée final2: ${final2Duration}s`);
-            console.log(`🎭 Overlay dernière frame de final2 sur 0.7s du custom clip`);
+            console.log(`⏱️ Création Final4 avec mask dernière frame sur 0.7s du custom clip`);
 
             const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
-                [0:v]reverse,trim=duration=0.001,reverse[last_frame];
-                [last_frame]loop=loop=-1:size=17:start=0[mask_loop];
+                [0:v]reverse,select='eq(n\\,0)',loop=loop=-1:size=17:start=0[last_frame_mask];
                 [1:v]scale=1080:1920[custom_scaled];
-                [custom_scaled][mask_loop]overlay=0:0:enable='lt(t,0.7)'[custom_with_mask];
+                [custom_scaled][last_frame_mask]overlay=0:0:enable='lt(t,0.7)'[custom_with_mask];
                 [0:v][0:a][custom_with_mask][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
             " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
+            console.log('🔧 Commande Final4 avec mask dernière frame:', ffmpegCmd);
+
             exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
                 if (error) {
-                    console.log('🔄 Tentative méthode alternative...');
-
-                    // Version plus simple si ça échoue
-                    const simpleCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
+                    console.log('🔄 Tentative avec méthode de fallback...');
+                    
+                    // Fallback si la méthode principale échoue
+                    const fallbackCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
                         [1:v]scale=1080:1920[custom_scaled];
                         [0:v]trim=end=${final2Duration},reverse,trim=duration=1,reverse,loop=loop=-1:size=17:start=0,trim=duration=0.7[overlay_mask];
                         [custom_scaled][overlay_mask]overlay=enable='lt(t,0.7)'[masked_custom];
                         [0:v][0:a][masked_custom][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
                     " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
-                    exec(simpleCmd, { timeout: 60000 }, (simpleError, simpleStdout, simpleStderr) => {
-                        if (simpleError) {
-                            console.error('💥 Erreur Final4:', simpleStderr);
-                            return reject(new Error(simpleStderr));
+                    exec(fallbackCmd, { timeout: 60000 }, (fallbackError, fallbackStdout, fallbackStderr) => {
+                        if (fallbackError) {
+                            console.error('💥 Erreur Final4 fallback:', fallbackStderr);
+                            return reject(new Error(fallbackStderr));
                         }
-                        console.log('✅ Final4 créé avec overlay simple');
+                        console.log('✅ Final4 créé avec fallback');
                         resolve(outputPath);
                     });
                 } else {
-                    console.log('✅ Final4 créé avec overlay mask');
+                    console.log('✅ Final4 créé avec mask dernière frame');
                     resolve(outputPath);
                 }
             });
