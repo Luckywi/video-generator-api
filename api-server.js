@@ -431,7 +431,8 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                 [1:a]adelay=delays=0s:all=1[custom_audio_delayed];
                 [final2_audio_extended][custom_audio_delayed]amix=inputs=2:duration=first[mixed_audio_phase1];
 
-                [1:v]split[v1][v2];
+                [1:v]scale=1080:1920[custom_scaled];
+                [custom_scaled]split[v1][v2];
                 [v1]trim=start=0:end=${customClipDuration - 0.7},setpts=PTS-STARTPTS[main_part];
                 [v2]trim=start=${customClipDuration - 0.7},setpts=PTS-STARTPTS[last_part];
 
@@ -454,7 +455,7 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                     console.log('🔄 Tentative avec méthode simplifiée...');
 
                     // Fallback vers l'ancienne méthode si la complexe échoue
-                    const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+                    const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[1:v]scale=1080:1920[custom_scaled];[0:v][0:a][custom_scaled][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
                     exec(simpleFfmpegCmd, { timeout: 60000 }, (simpleError, simpleStdout, simpleStderr) => {
                         if (simpleError) {
