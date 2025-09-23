@@ -418,37 +418,47 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
     return new Promise(async (resolve, reject) => {
         try {
-            console.log('🎬 Étape 1: Extension clip2 de 0.7s avec dernière frame...');
+            const final2Duration = await getVideoDuration(final2Path);
+            const audioPrerollTime = 0.7; // Audio commence 0.7s avant
+            const audioStartTime = final2Duration - audioPrerollTime;
 
-            // Commande avec audio anticipé du clip importé
+            console.log(`⏱️ Durée final2: ${final2Duration}s`);
+            console.log(`🎵 Audio custom démarre à: ${audioStartTime}s (0.7s avant la fin)`);
+            console.log(`🎬 Vidéo custom démarre avec 0.7s déjà écoulées`);
+
             const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
-                [0:v]tpad=stop_mode=clone:stop_duration=0.7[final2_extended];
-                [1:a]adelay=delays=0s[custom_audio_immediate];
-                [0:a][custom_audio_immediate]amix=inputs=2:duration=first[mixed_phase1_audio];
-                [1:v]scale=1080:1920[custom_scaled];
-                [custom_scaled]trim=start=0.7,setpts=PTS-STARTPTS[custom_video_trimmed];
-                [final2_extended][mixed_phase1_audio][custom_video_trimmed][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
+                [1:v]scale=1080:1920[custom_scaled_full];
+                [custom_scaled_full]trim=start=0.7,setpts=PTS-STARTPTS[custom_video_trimmed];
+                [1:a]adelay=${audioStartTime * 1000}[custom_audio_preroll];
+                [0:a][custom_audio_preroll]amix=inputs=2:duration=longest[phase1_mixed_audio];
+                [1:a]atrim=start=0.7,asetpts=PTS-STARTPTS[custom_audio_trimmed];
+                [0:v][phase1_mixed_audio][custom_video_trimmed][custom_audio_trimmed][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
             " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
-            console.log('🔧 Commande Final4 avec extension clip2:', ffmpegCmd);
+            console.log('🔧 Commande Final4 avec pre-roll audio et video trim:');
 
             exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
                 if (error) {
-                    console.log('🔄 Tentative avec méthode de base...');
+                    console.log('🔄 Tentative avec méthode simplifiée...');
 
-                    // Fallback vers concat simple sans extension
-                    const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[1:v]scale=1080:1920[custom_scaled];[0:v][0:a][custom_scaled][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+                    // Version simplifiée si la complexe échoue
+                    const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
+                        [1:v]scale=1080:1920,trim=start=0.7,setpts=PTS-STARTPTS[custom_trimmed];
+                        [1:a]adelay=${audioStartTime * 1000},atrim=start=0.7,asetpts=PTS-STARTPTS[custom_audio];
+                        [0:a][1:a]amix=inputs=2:duration=first[mixed_audio];
+                        [0:v][mixed_audio][custom_trimmed][custom_audio][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]
+                    " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
 
                     exec(simpleFfmpegCmd, { timeout: 60000 }, (simpleError, simpleStdout, simpleStderr) => {
                         if (simpleError) {
-                            console.error('💥 Erreur Final4 simple:', simpleStderr);
+                            console.error('💥 Erreur Final4:', simpleStderr);
                             return reject(new Error(simpleStderr));
                         }
-                        console.log('✅ Final4 créé avec méthode de base:', outputPath);
+                        console.log('✅ Final4 créé avec pre-roll (simple):', outputPath);
                         resolve(outputPath);
                     });
                 } else {
-                    console.log('✅ Final4 créé avec extension clip2:', outputPath);
+                    console.log('✅ Final4 créé avec pre-roll audio + video trim:', outputPath);
                     resolve(outputPath);
                 }
             });
