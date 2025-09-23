@@ -425,9 +425,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
             console.log(`⏱️ Durée custom clip: ${customClipDuration}s, iris out démarre à: ${irisStartTime}s`);
 
-            // Étape 1: Appliquer l'iris out (circleclose) sur le customClip avec normalisation de résolution
-            const irisCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "[0:v]scale=1080:1920[scaled];color=white:size=1080x1920:duration=0.5[white];[scaled][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithFade}"`;
-            console.log('🎭 Applying iris out (circleclose) to custom clip with scaling:', irisCmd);
+            // Étape 1: Appliquer l'iris out (circleclose) sur le customClip avec normalisation complète
+            const irisCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "[0:v]scale=1080:1920,fps=25[scaled];color=white:size=1080x1920:duration=0.5:rate=25[white];[scaled][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithFade}"`;
+            console.log('🎭 Applying iris out (circleclose) to custom clip with full normalization:', irisCmd);
 
             exec(irisCmd, { timeout: 60000 }, (irisError, stdout, stderr) => {
             if (irisError) {
@@ -461,9 +461,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
                     const normalizeAndCombine = async () => {
                         try {
-                            // Normaliser le customClip avec l'iris out (circleclose)
+                            // Normaliser le customClip avec l'iris out (circleclose) et timebase uniforme
                             await new Promise((res, rej) => {
-                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "[0:v]scale=1080:1920[scaled];color=white:size=1080x1920:duration=0.5[white];[scaled][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
+                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "[0:v]scale=1080:1920,fps=25[scaled];color=white:size=1080x1920:duration=0.5:rate=25[white];[scaled][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
                                 exec(normalizeCustomCmd, (err) => err ? rej(err) : res());
                             });
 
