@@ -19,7 +19,7 @@ function getAirQualityMapping() {
     return {
         1: 'bon',
         2: 'moyen',
-        3: 'degradé',
+        3: 'dégradé',
         4: 'mauvais',
         5: 'très mauvais',
         6: 'extrêmement mauvais'

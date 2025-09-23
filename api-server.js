@@ -93,7 +93,7 @@ function getVideoDuration(videoPath) {
 
 async function generateMuteVideo(text, videoPath, duration) {
     return new Promise((resolve, reject) => {
-        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=80:fontcolor=black,fade=in:st=0:d=1" -c:v libx264 -y "${videoPath}"`;
+        const ffmpegCommand = `ffmpeg -f lavfi -i color=c=white:s=1080x1920:d=${duration} -vf "drawtext=text='${text}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=80:fontcolor=black,fade=in:st=0:d=1" -c:v libx264 -preset ultrafast -crf 28 -threads 2 -y "${videoPath}"`;
 
         console.log('📱 Génération vidéo verticale iPhone:', videoPath);
 
