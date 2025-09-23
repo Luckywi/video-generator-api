@@ -416,65 +416,55 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
     const outputPath = path.join(outputDir, `complete-with-custom-${dateStr}.mp4`);
 
-    return new Promise((resolve, reject) => {
-        const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
-        console.log('🔧 Final4 creation command:', ffmpegCmd);
+    return new Promise(async (resolve, reject) => {
+        try {
+            console.log('🎬 Création séquence complexe Final4 avec transitions...');
 
-        exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
-            if (error) {
-                console.log('🔄 Tentative avec normalisation des clips...');
+            // Étape 1: Obtenir les durées des clips
+            const customClipDuration = await getVideoDuration(customClipPath);
+            console.log(`⏱️ Durée clip personnalisé: ${customClipDuration}s`);
 
-                const tempDir = path.join(outputDir, 'temp');
-                if (!fs.existsSync(tempDir)) {
-                    fs.mkdirSync(tempDir, { recursive: true });
+            // Étape 2: Créer la séquence complexe avec filter_complex
+            const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "
+                [0:v]tpad=stop_mode=clone:stop_duration=0.7[final2_extended];
+                [0:a]apad=pad_dur=0.7[final2_audio_extended];
+                [1:a]adelay=delays=0s:all=1[custom_audio_delayed];
+                [final2_audio_extended][custom_audio_delayed]amix=inputs=2:duration=first[mixed_audio_phase1];
+
+                [1:v]geq='if(hypot(X-W/2,Y-H/2) > (W/2 * (1-t/${customClipDuration - 0.7})), 255, 0)':enable='gte(t,${customClipDuration - 0.7})'[custom_with_circle];
+
+                color=white:s=1080x1920:d=0.1[white_transition];
+
+                [final2_extended][mixed_audio_phase1][custom_with_circle][1:a][white_transition][custom_audio_delayed][2:v][2:a]concat=n=4:v=1:a=1:unsafe=1[outv][outa]
+            " -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+
+            console.log('🔧 Commande Final4 avec séquence complexe:', ffmpegCmd);
+
+            exec(ffmpegCmd, { timeout: 120000 }, (error, stdout, stderr) => {
+                if (error) {
+                    console.log('🔄 Tentative avec méthode simplifiée...');
+
+                    // Fallback vers l'ancienne méthode si la complexe échoue
+                    const simpleFfmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${customClipPath}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+
+                    exec(simpleFfmpegCmd, { timeout: 60000 }, (simpleError, simpleStdout, simpleStderr) => {
+                        if (simpleError) {
+                            console.error('💥 Erreur Final4 simple:', simpleStderr);
+                            return reject(new Error(simpleStderr));
+                        }
+                        console.log('✅ Final4 créé avec méthode simplifiée:', outputPath);
+                        resolve(outputPath);
+                    });
+                } else {
+                    console.log('✅ Final4 créé avec séquence complexe:', outputPath);
+                    resolve(outputPath);
                 }
+            });
 
-                const tempFinal2 = path.join(tempDir, `temp-final2-${dateStr}.mp4`);
-                const tempCustom = path.join(tempDir, `temp-custom-${dateStr}.mp4`);
-                const tempPollutant = path.join(tempDir, `temp-pollutant-${dateStr}.mp4`);
-
-                const normalizeAndCombine = async () => {
-                    try {
-                        await Promise.all([
-                            new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${final2Path}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
-                            }),
-                            new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${customClipPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
-                            }),
-                            new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
-                            })
-                        ]);
-
-                        const finalCmd = `ffmpeg -y -i "${tempFinal2}" -i "${tempCustom}" -i "${tempPollutant}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 "${outputPath}"`;
-
-                        exec(finalCmd, (finalError, stdout2, stderr2) => {
-                            [tempFinal2, tempCustom, tempPollutant].forEach(file => {
-                                if (fs.existsSync(file)) fs.unlinkSync(file);
-                            });
-                            if (fs.existsSync(tempDir)) fs.rmdirSync(tempDir);
-
-                            if (finalError) {
-                                console.error('💥 Erreur final4 après normalisation:', stderr2);
-                                return reject(new Error(stderr2));
-                            }
-                            console.log('✅ Final4 video created with normalization:', outputPath);
-                            resolve(outputPath);
-                        });
-
-                    } catch (normError) {
-                        console.error('💥 Erreur normalisation:', normError);
-                        reject(normError);
-                    }
-                };
-
-                normalizeAndCombine();
-            } else {
-                console.log('✅ Final4 video created:', outputPath);
-                resolve(outputPath);
-            }
-        });
+        } catch (error) {
+            console.error('💥 Erreur createFinal4WithCustomClip:', error);
+            reject(error);
+        }
     });
 }
 
@@ -517,9 +507,11 @@ async function generateComplete(customClipPath = null) {
         // Étape 3: Obtenir durée audio et générer vidéo
         console.log('\n=== ÉTAPE 3: GÉNÉRATION VIDÉO ===');
         const audioDuration = await getAudioDuration(audioPath);
+        const videoDuration = audioDuration + 0.4; // Ajouter 0.4 seconde de pause après l'audio
         console.log(`⏱️ Durée audio: ${audioDuration} secondes`);
+        console.log(`⏱️ Durée vidéo: ${videoDuration} secondes (+0.4s de pause)`);
 
-        await generateMuteVideo(frenchDate, videoPath, audioDuration);
+        await generateMuteVideo(frenchDate, videoPath, videoDuration);
 
         // Étape 4: Fusionner audio et vidéo dans /final
         console.log('\n=== ÉTAPE 4: FUSION AUDIO/VIDÉO ===');
