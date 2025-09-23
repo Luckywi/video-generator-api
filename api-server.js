@@ -430,9 +430,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
             console.log(`⏱️ Durée custom clip: ${customClipDuration}s, iris out démarre à: ${irisStartTime}s`);
 
-            // Étape 1: Appliquer le mask overlay + iris out blanc sur le customClip (avec frei0r)
-            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]frei0r=iris:0.5|0.5|1|0:enable='between(t,${irisStartTime},${customClipDuration})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
-            console.log('🎭 Applying mask overlay + iris out to custom clip:', overlayCmd);
+            // Étape 1: Appliquer le mask overlay + fade blanc sur le customClip (approche simple et fiable)
+            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]fade=t=out:st=${irisStartTime}:d=0.5:color=white[faded_out]" -map "[faded_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
+            console.log('🎭 Applying mask overlay + white fade to custom clip:', overlayCmd);
 
             exec(overlayCmd, { timeout: 60000 }, (overlayError, stdout, stderr) => {
             if (overlayError) {
@@ -466,9 +466,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
                     const normalizeAndCombine = async () => {
                         try {
-                            // Normaliser le customClip avec le mask et iris out appliqués (avec frei0r)
+                            // Normaliser le customClip avec le mask et fade blanc appliqués (approche simple)
                             await new Promise((res, rej) => {
-                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]frei0r=iris:0.5|0.5|1|0:enable='between(t,${irisStartTime},${customClipDuration})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
+                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]fade=t=out:st=${irisStartTime}:d=0.5:color=white[faded_out]" -map "[faded_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
                                 exec(normalizeCustomCmd, (err) => err ? rej(err) : res());
                             });
 
