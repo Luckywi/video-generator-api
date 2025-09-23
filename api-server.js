@@ -363,7 +363,7 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
                 const tempFinal2 = path.join(outputDir, `temp-final2-${dateStr}.mp4`);
                 const tempPollutant = path.join(outputDir, `temp-pollutant-${dateStr}.mp4`);
 
-                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`;
+                const normalizeCmd1 = `ffmpeg -y -i "${absoluteFinal2Path}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`;
                 console.log('🔧 Normalisation final2:', normalizeCmd1);
 
                 exec(normalizeCmd1, { timeout: 60000 }, (error1, stdout1, stderr1) => {
@@ -372,7 +372,7 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
                         return reject(new Error(stderr1));
                     }
 
-                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`;
+                    const normalizeCmd2 = `ffmpeg -y -i "${absolutePollutantPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`;
                     console.log('🔧 Normalisation pollutant:', normalizeCmd2);
 
                     exec(normalizeCmd2, { timeout: 60000 }, (error2, stdout2, stderr2) => {
@@ -437,13 +437,13 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
                     try {
                         await Promise.all([
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${final2Path}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${final2Path}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempFinal2}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${customClipPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${customClipPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustom}"`, (err) => err ? rej(err) : res());
                             }),
                             new Promise((res, rej) => {
-                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
+                                exec(`ffmpeg -y -i "${pollutantClipsPath}" -vf scale=1080:1920 -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempPollutant}"`, (err) => err ? rej(err) : res());
                             })
                         ]);
 
