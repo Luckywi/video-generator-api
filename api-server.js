@@ -408,19 +408,14 @@ async function createFinal3(final2Path, pollutantClipsPath, dateStr) {
 
 async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantClipsPath, dateStr) {
     const outputDir = path.resolve('final4');
-    const maskPath = path.resolve('template-qualité/bonne-mask-1.mov');
 
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
         console.log('📁 Dossier final4 créé');
     }
 
-    if (!fs.existsSync(maskPath)) {
-        throw new Error(`❌ Mask file manquant: ${maskPath}`);
-    }
-
     const outputPath = path.join(outputDir, `complete-with-custom-${dateStr}.mp4`);
-    const tempCustomWithMask = path.join(outputDir, `temp-custom-with-mask-${dateStr}.mp4`);
+    const tempCustomWithFade = path.join(outputDir, `temp-custom-with-fade-${dateStr}.mp4`);
 
     return new Promise(async (resolve, reject) => {
         try {
@@ -430,26 +425,26 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
             console.log(`⏱️ Durée custom clip: ${customClipDuration}s, iris out démarre à: ${irisStartTime}s`);
 
-            // Étape 1: Appliquer le mask overlay + fade blanc sur le customClip (approche simple et fiable)
-            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]fade=t=out:st=${irisStartTime}:d=0.5:color=white[faded_out]" -map "[faded_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
-            console.log('🎭 Applying mask overlay + white fade to custom clip:', overlayCmd);
+            // Étape 1: Appliquer l'iris out (circleclose) sur le customClip
+            const irisCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "color=white:size=1080x1920:duration=0.5[white];[0:v][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithFade}"`;
+            console.log('🎭 Applying iris out (circleclose) to custom clip:', irisCmd);
 
-            exec(overlayCmd, { timeout: 60000 }, (overlayError, stdout, stderr) => {
-            if (overlayError) {
-                console.error('💥 Erreur application mask:', stderr);
+            exec(irisCmd, { timeout: 60000 }, (irisError, stdout, stderr) => {
+            if (irisError) {
+                console.error('💥 Erreur application iris out:', stderr);
                 return reject(new Error(stderr));
             }
 
-            console.log('✅ Mask appliqué au clip personnalisé');
+            console.log('✅ Iris out appliqué au clip personnalisé');
 
-            // Étape 2: Concaténer final2 + customClipWithMask + pollutantClips
-            const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${tempCustomWithMask}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
-            console.log('🔧 Final4 creation command with mask:', ffmpegCmd);
+            // Étape 2: Concaténer final2 + customClipWithFade + pollutantClips
+            const ffmpegCmd = `ffmpeg -y -i "${final2Path}" -i "${tempCustomWithFade}" -i "${pollutantClipsPath}" -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${outputPath}"`;
+            console.log('🔧 Final4 creation command with fade:', ffmpegCmd);
 
             exec(ffmpegCmd, { timeout: 60000 }, (error, stdout, stderr) => {
                 // Nettoyer le fichier temporaire
-                if (fs.existsSync(tempCustomWithMask)) {
-                    fs.unlinkSync(tempCustomWithMask);
+                if (fs.existsSync(tempCustomWithFade)) {
+                    fs.unlinkSync(tempCustomWithFade);
                 }
 
                 if (error) {
@@ -466,9 +461,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
                     const normalizeAndCombine = async () => {
                         try {
-                            // Normaliser le customClip avec le mask et fade blanc appliqués (approche simple)
+                            // Normaliser le customClip avec l'iris out (circleclose)
                             await new Promise((res, rej) => {
-                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]fade=t=out:st=${irisStartTime}:d=0.5:color=white[faded_out]" -map "[faded_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
+                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -filter_complex "[0:v]scale=1080:1920[scaled];color=white:size=1080x1920:duration=0.5[white];[scaled][white]xfade=transition=circleclose:duration=0.5:offset=${irisStartTime}[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
                                 exec(normalizeCustomCmd, (err) => err ? rej(err) : res());
                             });
 
