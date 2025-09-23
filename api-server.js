@@ -430,8 +430,8 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
             console.log(`⏱️ Durée custom clip: ${customClipDuration}s, iris out démarre à: ${irisStartTime}s`);
 
-            // Étape 1: Appliquer le mask overlay + iris out blanc sur le customClip
-            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]geq=r='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),r(X,Y),255)':g='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),g(X,Y),255)':b='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),b(X,Y),255)':enable='gte(t,${irisStartTime})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
+            // Étape 1: Appliquer le mask overlay + iris out blanc sur le customClip (avec frei0r)
+            const overlayCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]frei0r=iris:0.5|0.5|1|0:enable='between(t,${irisStartTime},${customClipDuration})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -preset ultrafast -crf 28 -threads 2 -r 25 "${tempCustomWithMask}"`;
             console.log('🎭 Applying mask overlay + iris out to custom clip:', overlayCmd);
 
             exec(overlayCmd, { timeout: 60000 }, (overlayError, stdout, stderr) => {
@@ -466,9 +466,9 @@ async function createFinal4WithCustomClip(final2Path, customClipPath, pollutantC
 
                     const normalizeAndCombine = async () => {
                         try {
-                            // Normaliser le customClip avec le mask et iris out appliqués
+                            // Normaliser le customClip avec le mask et iris out appliqués (avec frei0r)
                             await new Promise((res, rej) => {
-                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]geq=r='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),r(X,Y),255)':g='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),g(X,Y),255)':b='if(hypot(X-W/2,Y-H/2)<=W/2*max(0,1-(t-${irisStartTime})/0.5),b(X,Y),255)':enable='gte(t,${irisStartTime})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
+                                const normalizeCustomCmd = `ffmpeg -y -i "${customClipPath}" -i "${maskPath}" -filter_complex "[0:v]scale=1080:1920[scaled];[scaled][1:v]overlay=0:0:enable='between(t,0,0.7)'[masked];[masked]frei0r=iris:0.5|0.5|1|0:enable='between(t,${irisStartTime},${customClipDuration})'[iris_out]" -map "[iris_out]" -map 0:a -c:v libx264 -c:a aac -r 25 -preset ultrafast -crf 28 -threads 2 "${tempCustomNorm}"`;
                                 exec(normalizeCustomCmd, (err) => err ? rej(err) : res());
                             });
 
